@@ -1,7 +1,10 @@
 package uasurfer
 
 import (
+	"regexp"
+	"strconv"
 	"strings"
+	// "fmt"
 )
 
 // Browser struct contains the lowercase name of the browser, along
@@ -40,7 +43,7 @@ func (u *UserAgent) evalBrowserName(ua string) bool {
 		case strings.Contains(ua, "silk/"):
 			u.Browser.Name = BrowserSilk
 
-		case strings.Contains(ua, "edg/") || strings.Contains(ua, "edgios/") || strings.Contains(ua, "edga/")|| strings.Contains(ua, "edge/") || strings.Contains(ua, "iemobile/") || strings.Contains(ua, "msie "):
+		case strings.Contains(ua, "edg/") || strings.Contains(ua, "edgios/") || strings.Contains(ua, "edga/") || strings.Contains(ua, "edge/") || strings.Contains(ua, "iemobile/") || strings.Contains(ua, "msie "):
 			u.Browser.Name = BrowserIE
 
 		case strings.Contains(ua, "ucbrowser/") || strings.Contains(ua, "ucweb/"):
@@ -59,7 +62,7 @@ func (u *UserAgent) evalBrowserName(ua string) bool {
 			u.Browser.Name = BrowserYandex
 
 		// Edge, Silk and other chrome-identifying browsers must evaluate before chrome, unless we want to add more overhead
-		case strings.Contains(ua, "chrome/") || strings.Contains(ua, "crios/") || strings.Contains(ua, "chromium/") || strings.Contains(ua, "crmo/"):
+		case (strings.Contains(ua, "chrome/") || strings.Contains(ua, "crios/") || strings.Contains(ua, "chromium/") || strings.Contains(ua, "crmo/")) && !strings.Contains(ua, "spider"):
 			u.Browser.Name = BrowserChrome
 
 		case strings.Contains(ua, "android") && !strings.Contains(ua, "chrome/") && strings.Contains(ua, "version/") && !strings.Contains(ua, "like android"):
@@ -77,11 +80,11 @@ func (u *UserAgent) evalBrowserName(ua string) bool {
 			u.Browser.Name = BrowserAppleBot
 
 		// presume it's safari unless an esoteric browser is being specified (webOSBrowser, SamsungBrowser, etc.)
-		case strings.Contains(ua, "like gecko") && strings.Contains(ua, "mozilla/") && strings.Contains(ua, "safari/") && !strings.Contains(ua, "linux") && !strings.Contains(ua, "android") && !strings.Contains(ua, "browser/") && !strings.Contains(ua, "os/") && !strings.Contains(ua, "yabrowser/"):
+		case strings.Contains(ua, "like gecko") && strings.Contains(ua, "mozilla/") && strings.Contains(ua, "safari/") && !strings.Contains(ua, "linux") && !strings.Contains(ua, "android") && !strings.Contains(ua, "browser/") && !strings.Contains(ua, "os/") && !strings.Contains(ua, "yabrowser/") && !strings.Contains(ua, "spider"):
 			u.Browser.Name = BrowserSafari
 
 		// if we got this far and the device is iPhone or iPad, assume safari. Some agents don't actually contain the word "safari"
-		case strings.Contains(ua, "iphone") || strings.Contains(ua, "ipad"):
+		case (strings.Contains(ua, "iphone") || strings.Contains(ua, "ipad")) && !strings.Contains(ua, "spider"):
 			u.Browser.Name = BrowserSafari
 
 		// Google's search app on iPhone, leverages native Safari rather than Chrome
@@ -151,8 +154,20 @@ notwebkit:
 	case strings.Contains(ua, "coccocbot"):
 		u.Browser.Name = BrowserCocCocBot
 
+	case strings.Contains(ua, "yisouspider"):
+		u.Browser.Name = BrowserYisouBot
+
+	case strings.Contains(ua, "sogou web spider") || strings.Contains(ua, "sogou inst spider") || strings.Contains(ua, "sogou pic spider"):
+		u.Browser.Name = BrowserSogouBot
+
+	case u.evalBrowserUnknownBot(ua):
+		u.Browser.Name = BrowserBot
+
 	case strings.Contains(ua, "phantomjs"):
 		u.Browser.Name = BrowserBot
+
+	case u.evalClientUnknown(ua):
+		u.Browser.Name = BrowserUnknown
 
 	default:
 		u.Browser.Name = BrowserUnknown
@@ -222,4 +237,43 @@ func (u *UserAgent) evalBrowserVersion(ua string) {
 	case BrowserCocCoc:
 		_ = u.Browser.Version.findVersionNumber(ua, "coc_coc_browser/")
 	}
+}
+
+var (
+	spiderRx = regexp.MustCompilePOSIX("^mozilla/[4-7]{1}\\.0 \\(compatible; ([a-z]{2,64}bot|spider)[;/]+v?[0-9.]{0,8}; \\+(http://[a-z0-9/.]{3,128})\\)$")
+	unkownRx = regexp.MustCompilePOSIX("^([^/;]{3,64})[;/]+v?([0-9]{0,3})\\.?([0-9]{0,3})\\.?([0-9]{0,3}).*$")
+)
+
+func (u *UserAgent) evalBrowserUnknownBot(ua string) bool {
+	it := spiderRx.FindStringSubmatch(ua)
+	if len(it) == 3 {
+		u.Browser.NameStr = it[1]
+		u.Browser.Url = it[2]
+		return true
+	}
+	return false
+}
+
+func (u *UserAgent) evalClientUnknown(ua string) bool {
+	if strings.HasPrefix(ua, "mozilla/") {
+		return false
+	}
+
+	it := unkownRx.FindStringSubmatch(ua)
+	if len(it) == 5 {
+		u.Browser.NameStr = it[1]
+		if major, err := strconv.Atoi(it[2]); err == nil {
+			u.Browser.Version.Major = major
+		}
+		if minor, err := strconv.Atoi(it[3]); err == nil {
+			u.Browser.Version.Minor = minor
+		}
+		if patch, err := strconv.Atoi(it[4]); err == nil {
+			u.Browser.Version.Patch = patch
+		}
+
+		return true
+	}
+
+	return false
 }

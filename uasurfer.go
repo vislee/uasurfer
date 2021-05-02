@@ -68,7 +68,10 @@ const (
 	BrowserTwitterBot
 	BrowserYandexBot
 	BrowserCocCocBot
-	BrowserYahooBot // Bot list ends here
+	BrowserYahooBot
+	BrowserYisouBot
+	BrowserSogouBot
+	SentinelBot // Bot list ends here
 )
 
 // StringTrimPrefix is like String() but trims the "Browser" prefix
@@ -169,6 +172,8 @@ type UserAgent struct {
 type Browser struct {
 	Name    BrowserName
 	Version Version
+	NameStr string
+	Url     string
 }
 
 type OS struct {
@@ -186,7 +191,7 @@ func (ua *UserAgent) Reset() {
 
 // IsBot returns true if the UserAgent represent a bot
 func (ua *UserAgent) IsBot() bool {
-	if ua.Browser.Name >= BrowserBot && ua.Browser.Name <= BrowserYahooBot {
+	if ua.Browser.Name >= BrowserBot && ua.Browser.Name < SentinelBot {
 		return true
 	}
 	if ua.OS.Name == OSBot {
